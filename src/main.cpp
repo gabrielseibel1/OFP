@@ -3,15 +3,17 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include "grid_potts_example.h"
+#include <cstring>
+#define M_PI 3.1415
 
 void usage();
 
-void flowArrows(cv::Mat *orig, cv::Mat *flow);
+void flowArrows(cv::Mat *orig, cv::Mat *flow, int i);
 
-void flowColors(cv::Mat *orig, cv::Mat *flow);
+void flowColors(cv::Mat *orig, cv::Mat *flow, int i);
 
 int main(int argc, char **argv) {
-    if (argc != 3) { //TODO change to 5 images (argc = 6) and use all pairs
+	if (argc != 6) { //TODO change to 5 images (argc = 6) and use all pairs
         usage();
         return -1;
     }
@@ -35,21 +37,22 @@ int main(int argc, char **argv) {
         cv::waitKey(0);
     }
 
-    cv::Mat flow;
+    cv::Mat flow[argc - 2];
     //cv::calcOpticalFlowFarneback(framesManip[0], framesManip[1], flow, 0.4, 1, 12, 2, 8, 1.2, 0);
-    cv::calcOpticalFlowFarneback(framesManip[0], framesManip[1], flow, 0.5, 3, 15, 3, 5, 1.2, 0);
-
-    flowArrows(&framesOrig[0], &flow);
-    flowColors(&framesOrig[0], &flow);
+    for(int i = 0; i < 4; i++) {
+        cv::calcOpticalFlowFarneback(framesManip[i], framesManip[i+1], flow[i], 0.5, 3, 15, 3, 5, 1.2, 0);    
+        flowArrows(&framesOrig[i], &flow[i], i);
+        flowColors(&framesOrig[i], &flow[i], i);
+    }
 
     return 0;
 }
 
 void usage() { //TODO change to 5 frames
-    std::cout << "Usage: <executable> <image> <image2>\n";
+    std::cout << "Usage: <executable> <image1> <image2> <image3> <image4> <image5>\n";
 }
 
-void flowArrows(cv::Mat *orig, cv::Mat *flow) {
+void flowArrows(cv::Mat *orig, cv::Mat *flow, int i) {
     cv::Mat flowArrows;
     orig->copyTo(flowArrows);
     auto size = flowArrows.size();
@@ -64,12 +67,12 @@ void flowArrows(cv::Mat *orig, cv::Mat *flow) {
         }
     }
     // draw the results
-    cv::namedWindow("Flow - Arrows", cv::WINDOW_AUTOSIZE);
-    cv::imshow("Flow - Arrows", flowArrows);
+    cv::namedWindow(std::to_string(i + 5), cv::WINDOW_AUTOSIZE);
+    cv::imshow(std::to_string(i + 5), flowArrows);
     cv::waitKey(0);
 }
 
-void flowColors(cv::Mat *orig, cv::Mat *flow) {
+void flowColors(cv::Mat *orig, cv::Mat *flow, int i) {
     std::vector<float> ptsX, ptsY;
     auto size = orig->size();
     //get polar coordinates of flow vector
@@ -106,7 +109,7 @@ void flowColors(cv::Mat *orig, cv::Mat *flow) {
     cv::cvtColor(flowColors, flowColors, cv::COLOR_HSV2BGR);
 
     // draw the results
-    cv::namedWindow("Flow - Colors", cv::WINDOW_AUTOSIZE);
-    cv::imshow("Flow - Colors", flowColors);
+    cv::namedWindow(std::to_string(i + 15), cv::WINDOW_AUTOSIZE);
+    cv::imshow(std::to_string(i + 15), flowColors);
     cv::waitKey(0);
 }
