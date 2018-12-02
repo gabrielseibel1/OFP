@@ -251,6 +251,13 @@ void separateBasedOnTwoFieldsAndSave(cv::Mat *frame, cv::Mat *field1, cv::Mat *f
     //cv::addWeighted(*field1, 1, *field2, 1, 0, meanField);
     cv::multiply(*field1, *field2, meanField);
 
+    /*for (int y = 0; y < meanField.size().height; y++) {
+        for (int x = 0; x < meanField.size().width; x++) {
+            field1->at<float>(y,x) = abs(field1->at<float>(y,x));
+            field2->at<float>(y,x) = abs(field2->at<float>(y,x));
+        }
+    }*/
+
     float meanBg = getBackgroundMean(&meanField);
     float meanFg = getForegroundMean(&meanField);
     float oldThreshold = 0.0;
@@ -265,6 +272,8 @@ void separateBasedOnTwoFieldsAndSave(cv::Mat *frame, cv::Mat *field1, cv::Mat *f
     float maxBlue = (meanBg + threshold) / 2;
     float maxPurple = (threshold + meanFg) / 2;
 
+    //cv::threshold(meanField, meanField, maxBlue, 0, cv::THRESH_TOZERO_INV);
+
     cv::Mat separatedImage;
     frame->copyTo(separatedImage);
     cv::Vec3b color;
@@ -273,12 +282,12 @@ void separateBasedOnTwoFieldsAndSave(cv::Mat *frame, cv::Mat *field1, cv::Mat *f
         for (int x = 0; x < size.width; x++) {
             color = separatedImage.at<cv::Vec3b>(y, x);
 
-            if (meanField.at<float>(y, x * 2 /*TODO dont *2*/) < maxBlue) { //paint it blue
+            if (abs(meanField.at<float>(y, x * 2 /*TODO dont *2*/)) < abs(maxBlue)) { //paint it blue
                 color[0] = 255;
                 color[1] = 255;
                 color[2] = 0;
                 separatedImage.at<cv::Vec3b>(y, x) = color;
-            } else if (meanField.at<float>(y, x * 2 /*TODO dont *2*/) < maxPurple) { //paint it purple
+            } else if (abs(meanField.at<float>(y, x * 2 /*TODO dont *2*/)) < abs(maxPurple)) { //paint it purple
                 color[0] = 130;
                 color[1] = 0;
                 color[2] = 130;
