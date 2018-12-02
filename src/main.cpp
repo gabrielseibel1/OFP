@@ -8,29 +8,33 @@
 
 void usage();
 
-float get_background_media(cv::Mat *flow);
+float getBackgroundMean(cv::Mat *flow);
 
-float get_foreground_media(cv::Mat *flow);
+float getForegroundMean(cv::Mat *flow);
 
-float get_media_pixels_limiar(cv::Mat *flow, float limiar, int layer);
+float getMeanMagnitudeWithThreshold(cv::Mat *flow, float threshold, int layer);
 
 void flowArrows(cv::Mat *orig, cv::Mat *flow, int i);
 
 void flowColors(cv::Mat *orig, cv::Mat *flow, int i);
 
-void background_image(cv::Mat *orig, cv::Mat *flow, float limiar);
+void separatedImage(cv::Mat *orig, cv::Mat *flow, float limiar);
+
+void separateBasedOnTwoFields(cv::Mat *frame, cv::Mat *field1, cv::Mat *field2);
 
 int main(int argc, char **argv) {
-    //if (argc != 6) { //TODO change to 5 images (argc = 6) and use all pairs
+    //if (argc != 6) {
         //usage();
         //return -1;
     //}
+
 	std::string arquivosChar[5];
-	arquivosChar[0] = "C:/Users/I866859/IdeaProjects/OFP/img/teste1.jpg";
-	arquivosChar[1] = "C:/Users/I866859/IdeaProjects/OFP/img/teste2.jpg";
-	arquivosChar[2] = "C:/Users/I866859/IdeaProjects/OFP/img/teste3.jpg";
-	arquivosChar[3] = "C:/Users/I866859/IdeaProjects/OFP/img/teste4.jpg";
-	arquivosChar[4] = "C:/Users/I866859/IdeaProjects/OFP/img/teste5.jpg";
+	arquivosChar[0] = "../img/sunset_0.jpg";
+    arquivosChar[1] = "../img/sunset_1.jpg";
+    arquivosChar[2] = "../img/sunset_2.jpg";
+    arquivosChar[3] = "../img/sunset_3.jpg";
+	arquivosChar[4] = "../img/sunset_4.jpg";
+
 	static const int size = 6;
     cv::Mat framesOrig[size - 1];
     cv::Mat framesManip[size - 1];
@@ -42,8 +46,10 @@ int main(int argc, char **argv) {
             return -1;
         }
 
-        cv::Canny(framesOrig[i], framesManip[i], 200, 200 / 3, 3, true);
-        threshold(framesManip[i], framesManip[i], 0, 255, cv::THRESH_TOZERO /*dont use binary*/);
+        cv::cvtColor(framesOrig[i], framesManip[i], cv::COLOR_BGR2GRAY);
+
+        //cv::Canny(blurred, framesManip[i], 200, 200 / 3, 3, true);
+
 
         namedWindow(std::to_string(i), cv::WINDOW_AUTOSIZE);
         imshow(std::to_string(i), framesManip[i]);
@@ -51,37 +57,19 @@ int main(int argc, char **argv) {
         cv::waitKey(0);
     }
 
-    cv::Mat flow[size - 2];
+    cv::Mat flows[size - 2];
     //cv::calcOpticalFlowFarneback(framesManip[0], framesManip[1], flow, 0.4, 1, 12, 2, 8, 1.2, 0);
     for(int i = 0; i < 4; i++) {
-        cv::calcOpticalFlowFarneback(framesManip[i], framesManip[i+1], flow[i], 0.5, 3, 15, 3, 5, 1.2, 0);    
-        flowArrows(&framesOrig[i], &flow[i], i);
-        flowColors(&framesOrig[i], &flow[i], i);
+        cv::calcOpticalFlowFarneback(framesManip[i], framesManip[i+1], flows[i], 0.5, 3, 15, 3, 5, 1.2, 0);
+        flowArrows(&framesOrig[i], &flows[i], i);
+        flowColors(&framesOrig[i], &flows[i], i);
     }
 
-	// NAO FUNCIONA MT BEM, CORTA A IMAGEM FOREGROUND
-	/*auto size_f = flow[0].size();
-	cv::Mat mean_flow = cv::Mat::zeros(size_f, flow[0].type());
-	for (int i = 0; i < 4; i++) {
-		for (int y = 0; y < size_f.height; y ++) {
-			for (int x = 0; x < size_f.width; x ++) {
-				mean_flow.at<float>(y, x) += flow[i].at<float>(y, x)/4.0;
-			}
-		}
-	}*/
-
-	float mean_bg = get_background_media(&flow[0]);
-	float mean_fg = get_foreground_media(&flow[0]);
-	float old_limiar = 0.0;
-	float limiar = (mean_bg + mean_fg) / 2;
-	while (abs(limiar - old_limiar) > 0.1) {
-		mean_bg = get_media_pixels_limiar(&flow[0], limiar, 0);
-		mean_fg = get_media_pixels_limiar(&flow[0], limiar, 1);
-		old_limiar = limiar;
-		limiar = (mean_bg + mean_fg) / 2;
-	}
-
-	background_image(&framesOrig[0], &flow[0], limiar);
+	//separateBasedOnTwoFields(&framesOrig[0], &flows[0], &flows[0]);
+    separateBasedOnTwoFields(&framesOrig[1], &flows[0], &flows[1]);
+    separateBasedOnTwoFields(&framesOrig[2], &flows[1], &flows[2]);
+    separateBasedOnTwoFields(&framesOrig[3], &flows[2], &flows[3]);
+    //separateBasedOnTwoFields(&framesOrig[4], &flows[3], &flows[3]);
 
     return 0;
 }
@@ -152,15 +140,15 @@ void flowColors(cv::Mat *orig, cv::Mat *flow, int i) {
 }
 
 
-float get_background_media(cv::Mat *flow) {
+float getBackgroundMean(cv::Mat *flow) {
 	auto size = flow->size();
-	float media = 0;
+	float mean = 0;
 	float count = 0;
 	//cv::Scalar intensity;
 	for (int y = 0; y < size.height; y++) {
 		for (int x = 0; x < size.width; x++) {
 			if (y == 0 || y == size.height - 1) {
-				media += flow->at<float>(y, x);
+				mean += flow->at<float>(y, x);
 				count++;
 			}
 			else {
@@ -168,34 +156,34 @@ float get_background_media(cv::Mat *flow) {
 					x = size.width - 2;
 				}
 				else {
-					media += flow->at<float>(y, x);
+					mean += flow->at<float>(y, x);
 					count++;
 				}
 			}
 		}
 	}
-	return media/count;
+	return mean/count;
 }
 
 
-float get_foreground_media(cv::Mat *flow) {
+float getForegroundMean(cv::Mat *flow) {
 	auto size = flow->size();
-	float media = 0;
+	float mean = 0;
 	float count = 0;
 	for (int y = 0; y < size.height; y++) {
 		for (int x = 0; x < size.width; x++) {
 			if (y != 0 && y != size.height - 1) {
 				if (x != 0 && x != size.width - 1) {
-					media += flow->at<float>(y, x);
+					mean += flow->at<float>(y, x);
 					count++;
 				}
 			}
 		}
 	}
-	return media/count;
+	return mean/count;
 }
 
-float get_media_pixels_limiar(cv::Mat *flow, float limiar, int layer) {
+float getMeanMagnitudeWithThreshold(cv::Mat *flow, float threshold, int layer) {
 	auto size = flow->size();
 	float media = 0;
 	float count = 0;
@@ -204,13 +192,13 @@ float get_media_pixels_limiar(cv::Mat *flow, float limiar, int layer) {
 		for (int x = 0; x < size.width; x++) {
 			value = flow->at<float>(y, x);
 			if (layer == 0) {
-				if (value < limiar) {
+				if (value < threshold) {
 					media += value;
 					count++;
 				}
 			}
 			else {
-				if (value >= limiar) {
+				if (value >= threshold) {
 					media += value;
 					count++;
 				}
@@ -221,7 +209,7 @@ float get_media_pixels_limiar(cv::Mat *flow, float limiar, int layer) {
 }
 
 
-void background_image(cv::Mat *orig, cv::Mat *flow, float limiar) {
+void separatedImage(cv::Mat *orig, cv::Mat *flow, float limiar) {
 	cv::Mat background;
 	cv::Vec3b color;
 	orig->copyTo(background);
@@ -247,4 +235,75 @@ void background_image(cv::Mat *orig, cv::Mat *flow, float limiar) {
 	imshow("Background", background);
 	std::cout << "Press any key to close the window.\n";
 	cv::waitKey(0);
+}
+
+void separateBasedOnTwoFields(cv::Mat *frame, cv::Mat *field1, cv::Mat *field2) {
+    cv::Mat meanField;
+    //cv::addWeighted(*field1, 1, *field2, 1, 0, meanField);
+    cv::multiply(*field1, *field2, meanField);
+
+    float meanBg = getBackgroundMean(&meanField);
+    float meanFg = getForegroundMean(&meanField);
+    float oldThreshold = 0.0;
+    float threshold = (meanBg + meanFg) / 2;
+    while (abs(threshold - oldThreshold) > 0.1) {
+        meanBg = getMeanMagnitudeWithThreshold(&meanField, threshold, 0);
+        meanFg = getMeanMagnitudeWithThreshold(&meanField, threshold, 1);
+        oldThreshold = threshold;
+        threshold = (meanBg + meanFg) / 2;
+    }
+
+
+
+    float maxBlue = (meanBg + threshold) / 2;
+    float maxPurple = (threshold + meanFg) / 2;
+
+
+    cv::Mat separatedImage;
+    frame->copyTo(separatedImage);
+    cv::Vec3b color;
+    auto size = frame->size();
+    for (int y = 0; y < size.height; y++) {
+        for (int x = 0; x < size.width; x++) {
+            color = separatedImage.at<cv::Vec3b>(y, x);
+
+            /*if (meanField.at<float>(y, x*2) < maxPurple) {
+                color[0] = 255;
+                color[1] = 255;
+                color[2] = 0;
+                separatedImage.at<cv::Vec3b>(y, x) = color;
+            }
+            else {
+                color[0] = 0;
+                color[1] = 0;
+                color[2] = 255;
+                separatedImage.at<cv::Vec3b>(y, x) = color;
+            }*/
+
+            if (meanField.at<float>(y, x*2 /*TODO dont *2*/) < maxBlue) { //paint it blue
+                color[0] = 255;
+                color[1] = 255;
+                color[2] = 0;
+                separatedImage.at<cv::Vec3b>(y, x) = color;
+            }
+            else if (meanField.at<float>(y, x*2 /*TODO dont *2*/) < maxPurple){ //paint it purple
+                color[0] = 130;
+                color[1] = 0;
+                color[2] = 130;
+                separatedImage.at<cv::Vec3b>(y, x) = color;
+            }
+            else { //paint it red
+                color[0] = 0;
+                color[1] = 0;
+                color[2] = 255;
+                separatedImage.at<cv::Vec3b>(y, x) = color;
+            }
+        }
+    }
+
+    namedWindow("Separation (R = Fg, P = ?, B = Bg)", cv::WINDOW_AUTOSIZE);
+    imshow("Separation (R = Fg, P = ?, B = Bg)", separatedImage);
+    std::cout << "Press any key to close the window.\n";
+    cv::waitKey(0);
+
 }
