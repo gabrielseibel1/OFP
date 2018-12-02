@@ -8,6 +8,9 @@
 #define BATCHES 7
 #define FRAMES 5
 #define FLOWS 4
+#define SEPARATIONS FRAMES - 2
+#define SEPARATIONS_CENTRAL_INDEX SEPARATIONS / 2
+#define FRAMES_CENTRAL_INDEX FRAMES / 2
 
 float getBackgroundMean(cv::Mat *flow);
 
@@ -19,7 +22,10 @@ void flowArrowsAndSave(cv::Mat *orig, cv::Mat *flow, std::string *name);
 
 void flowColorsAndSave(cv::Mat *orig, cv::Mat *flow, std::string *name);
 
-void separateBasedOnTwoFieldsAndSave(cv::Mat *frame, cv::Mat *field1, cv::Mat *field2, std::string *name);
+void separateBasedOnTwoFieldsAndSave(cv::Mat *frame, cv::Mat *field1, cv::Mat *field2, std::string *name,
+                                     cv::Mat *separated);
+
+void removeObstructions(std::string *name, cv::Mat *framesOrig, cv::Mat *separations);
 
 int main(int argc, char *argv[]) {
 
@@ -53,14 +59,63 @@ int main(int argc, char *argv[]) {
         }
 
         //separate foreground and background
-        for (int i = 1; i < 4; i++) {
+        cv::Mat separations[SEPARATIONS];
+        for (int i = 0; i < SEPARATIONS; i++) {
             std::string name = baseNames[batch] + "_detected_" + std::to_string(i) + ".jpg";
-            separateBasedOnTwoFieldsAndSave(&framesOrig[i], &flows[i - 1], &flows[i], &name);
+            separateBasedOnTwoFieldsAndSave(&framesOrig[i + 1], &flows[i], &flows[i + 1], &name, &separations[i]);
         }
+
+        //remove obstructions
+        std::string name = baseNames[batch] + "_obstruction_free.jpg";
+        removeObstructions(&name, framesOrig, separations);
 
     }
 
     return 0;
+}
+
+void removeObstructions(std::string *name, cv::Mat *framesOrig, cv::Mat *separations) {
+    cv::Mat noObstructions;
+    framesOrig[2].copyTo(noObstructions);
+
+    auto previousSeparation = separations[0];
+    auto centralSeparation = separations[1];
+    auto nextSeparation = separations[2];
+
+    for (int y = 0; y < noObstructions.size().height; ++y) {
+        for (int x = 0; x < noObstructions.size().width; ++x) {
+
+
+            if (centralSeparation.at<cv::Vec3b>(y, x)[2] >= 130) { //purple or red must be changed (is foreground)
+                //find a pixel that is background and use it
+
+                cv::Vec3b refPixel = noObstructions.at<cv::Vec3b>(y, x);
+
+                if (previousSeparation.at<cv::Vec3b>(y, x)[2] < 130) {
+                    //choose prev pixel
+                    cv::Vec3b prevPixel = framesOrig[1].at<cv::Vec3b>(y, x);
+
+                    refPixel[0] = prevPixel[0];
+                    refPixel[1] = prevPixel[1];
+                    refPixel[2] = prevPixel[2];
+
+
+                } else if (nextSeparation.at<cv::Vec3b>(y, x)[2] < 130) {
+                    //choose next pixel
+                    cv::Vec3b nextPixel = framesOrig[3].at<cv::Vec3b>(y, x);
+
+                    refPixel[0] = nextPixel[0];
+                    refPixel[1] = nextPixel[1];
+                    refPixel[2] = nextPixel[2];
+                }
+
+                noObstructions.at<cv::Vec3b>(y, x) = refPixel;
+            }
+        }
+    }
+
+    //save result
+    cv::imwrite(*name, noObstructions);
 }
 
 void flowArrowsAndSave(cv::Mat *orig, cv::Mat *flow, std::string *name) {
@@ -87,8 +142,8 @@ void flowColorsAndSave(cv::Mat *orig, cv::Mat *flow, std::string *name) {
     std::vector<float> ptsX, ptsY;
     auto size = orig->size();
     //get polar coordinates of flow vector
-    for (int y = 0; y < size.height; y ++) {
-        for (int x = 0; x < size.width; x ++) {
+    for (int y = 0; y < size.height; y++) {
+        for (int x = 0; x < size.width; x++) {
             // get the flow from y, x position * 10 for better visibility
             const cv::Point2f flowAtXY = flow->at<cv::Point2f>(y, x);
             ptsX.push_back(flowAtXY.x);
@@ -106,8 +161,8 @@ void flowColorsAndSave(cv::Mat *orig, cv::Mat *flow, std::string *name) {
     std::vector<cv::Mat> channels(3);
     split(flowColors, channels);
     int pointCount = 0;
-    for (int y = 0; y < size.height; y ++) {
-        for (int x = 0; x < size.width; x ++) {
+    for (int y = 0; y < size.height; y++) {
+        for (int x = 0; x < size.width; x++) {
             channels[0].at<uchar>(y, x) = static_cast<uchar>(angles[pointCount] * 180 / (M_PI / 2));
             channels[1].at<uchar>(y, x) = 255;
             channels[2].at<uchar>(y, x) = static_cast<uchar>(magnitudes[pointCount]);
@@ -190,7 +245,8 @@ float getMeanMagnitudeWithThreshold(cv::Mat *flow, float threshold, int layer) {
     return media / count;
 }
 
-void separateBasedOnTwoFieldsAndSave(cv::Mat *frame, cv::Mat *field1, cv::Mat *field2, std::string *name) {
+void separateBasedOnTwoFieldsAndSave(cv::Mat *frame, cv::Mat *field1, cv::Mat *field2, std::string *name,
+                                     cv::Mat *separated) {
     cv::Mat meanField;
     //cv::addWeighted(*field1, 1, *field2, 1, 0, meanField);
     cv::multiply(*field1, *field2, meanField);
@@ -241,4 +297,6 @@ void separateBasedOnTwoFieldsAndSave(cv::Mat *frame, cv::Mat *field1, cv::Mat *f
 
     // save the results
     cv::imwrite(*name, blend);
+
+    separatedImage.copyTo(*separated);
 }
